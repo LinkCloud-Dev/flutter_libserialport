@@ -319,17 +319,9 @@ SP_PRIV enum sp_return list_ports_fallback(struct sp_port ***list)
 			}
 			LOGI("Is a character device: %s", name);
 			
-			// Try to open the device to verify it's accessible
-			// Use O_RDONLY to avoid lock operations that trigger SELinux errors
-			LOGI("Attempting to open: %s", name);
-			int fd = open(name, O_RDONLY | O_NONBLOCK | O_NOCTTY | O_CLOEXEC);
-			if (fd < 0) {
-				LOGE("Open failed for %s: %s (errno: %d)", name, strerror(errno), errno);
-				DEBUG_FMT("Open failed for %s: %s", name, strerror(errno));
-				continue;
-			}
-			close(fd);
-			LOGI("Successfully opened and closed: %s", name);
+			// Skip device opening test to avoid SELinux lock errors on iMin devices
+			// The device will be opened later when actually needed
+			LOGI("Skipping device open test for %s (SELinux-safe)", name);
 			
 			LOGI("Adding to port list: %s", name);
 			DEBUG_FMT("Found accessible port %s", name);
