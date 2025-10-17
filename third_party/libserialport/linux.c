@@ -76,8 +76,8 @@ SP_PRIV enum sp_return get_port_details(struct sp_port *port)
 			port->transport = SP_TRANSPORT_USB;
 			// Set USB device information for FT232R
 			port->description = strdup("FT232R USB UART");
-			port->manufacturer = strdup("FTDI");
-			port->product = strdup("FT232R USB UART");
+			port->usb_manufacturer = strdup("FTDI");
+			port->usb_product = strdup("FT232R USB UART");
 		} else if (strstr(port->name, "rfcomm")) {
 			port->transport = SP_TRANSPORT_BLUETOOTH;
 			port->description = strdup(port->name);
@@ -97,8 +97,8 @@ SP_PRIV enum sp_return get_port_details(struct sp_port *port)
 			port->transport = SP_TRANSPORT_USB;
 			// Set USB device information for FT232R
 			port->description = strdup("FT232R USB UART");
-			port->manufacturer = strdup("FTDI");
-			port->product = strdup("FT232R USB UART");
+			port->usb_manufacturer = strdup("FTDI");
+			port->usb_product = strdup("FT232R USB UART");
 		} else if (strstr(port->name, "rfcomm")) {
 			port->transport = SP_TRANSPORT_BLUETOOTH;
 			port->description = strdup(port->name);
@@ -240,11 +240,11 @@ SP_PRIV enum sp_return get_port_details(struct sp_port *port)
 	if (port->description) {
 		LOGI("Port description: %s", port->description);
 	}
-	if (port->manufacturer) {
-		LOGI("Port manufacturer: %s", port->manufacturer);
+	if (port->usb_manufacturer) {
+		LOGI("Port manufacturer: %s", port->usb_manufacturer);
 	}
-	if (port->product) {
-		LOGI("Port product: %s", port->product);
+	if (port->usb_product) {
+		LOGI("Port product: %s", port->usb_product);
 	}
 	RETURN_OK();
 }
