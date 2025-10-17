@@ -56,13 +56,37 @@ SP_PRIV enum sp_return get_port_details(struct sp_port *port)
 		RETURN_ERROR(SP_ERR_ARG, "Device name not recognized");
 
 	snprintf(link_name, sizeof(link_name), "/sys/class/tty/%s", dev);
-	if (lstat(link_name, &statbuf) == -1)
-		RETURN_ERROR(SP_ERR_ARG, "Device not found");
+	if (lstat(link_name, &statbuf) == -1) {
+		DEBUG("Cannot access sysfs, using fallback detection");
+		// Fallback: try to detect transport type from device name
+		if (strstr(port->name, "ttyUSB") || strstr(port->name, "ttyACM"))
+			port->transport = SP_TRANSPORT_USB;
+		else if (strstr(port->name, "rfcomm"))
+			port->transport = SP_TRANSPORT_BLUETOOTH;
+		else
+			port->transport = SP_TRANSPORT_NATIVE;
+		
+		// Set basic description
+		port->description = strdup(port->name);
+		RETURN_OK();
+	}
 	if (!S_ISLNK(statbuf.st_mode))
 		snprintf(link_name, sizeof(link_name), "/sys/class/tty/%s/device", dev);
 	count = readlink(link_name, file_name, sizeof(file_name));
-	if (count <= 0 || count >= (int)(sizeof(file_name) - 1))
-		RETURN_ERROR(SP_ERR_ARG, "Device not found");
+	if (count <= 0 || count >= (int)(sizeof(file_name) - 1)) {
+		DEBUG("Cannot read sysfs link, using fallback detection");
+		// Fallback: try to detect transport type from device name
+		if (strstr(port->name, "ttyUSB") || strstr(port->name, "ttyACM"))
+			port->transport = SP_TRANSPORT_USB;
+		else if (strstr(port->name, "rfcomm"))
+			port->transport = SP_TRANSPORT_BLUETOOTH;
+		else
+			port->transport = SP_TRANSPORT_NATIVE;
+		
+		// Set basic description
+		port->description = strdup(port->name);
+		RETURN_OK();
+	}
 	file_name[count] = 0;
 	if (strstr(file_name, "bluetooth"))
 		port->transport = SP_TRANSPORT_BLUETOOTH;
@@ -74,8 +98,15 @@ SP_PRIV enum sp_return get_port_details(struct sp_port *port)
 			strcat(sub_dir, "../");
 
 			snprintf(file_name, sizeof(file_name), dir_name, dev, sub_dir, "busnum");
-			if (!(file = fopen_cloexec_rdonly(file_name)))
-				continue;
+			if (!(file = fopen_cloexec_rdonly(file_name))) {
+				DEBUG("Cannot access USB device info from sysfs, using fallback");
+				// Fallback: set basic USB device info
+				port->description = strdup(port->name);
+				port->usb_manufacturer = strdup("Unknown");
+				port->usb_product = strdup("USB Serial Device");
+				port->usb_serial = strdup("Unknown");
+				RETURN_OK();
+			}
 			count = fscanf(file, "%d", &bus);
 			fclose(file);
 			if (count != 1)
@@ -202,8 +233,11 @@ SP_PRIV enum sp_return list_ports(struct sp_port ***list)
 	struct stat statbuf;
 
 	DEBUG("Enumerating tty devices");
-	if (!(dir = opendir("/sys/class/tty")))
-		RETURN_FAIL("Could not open /sys/class/tty");
+	if (!(dir = opendir("/sys/class/tty"))) {
+		DEBUG("Could not open /sys/class/tty, trying /dev directly");
+		// Fallback: try to enumerate /dev directly for USB devices
+		return list_ports_fallback(list);
+	}
 
 	DEBUG("Iterating over results");
 	while ((entry = readdir(dir))) {
@@ -251,6 +285,56 @@ SP_PRIV enum sp_return list_ports(struct sp_port ***list)
 		if (!*list) {
 			SET_ERROR(ret, SP_ERR_MEM, "List append failed");
 			break;
+		}
+	}
+	closedir(dir);
+
+	return ret;
+}
+
+/* Fallback function when sysfs access is denied */
+SP_PRIV enum sp_return list_ports_fallback(struct sp_port ***list)
+{
+	DIR *dir;
+	struct dirent *entry;
+	char name[PATH_MAX];
+	int ret = SP_OK;
+	struct stat statbuf;
+
+	DEBUG("Fallback: Enumerating /dev directly");
+	if (!(dir = opendir("/dev")))
+		RETURN_FAIL("Could not open /dev");
+
+	DEBUG("Iterating over /dev entries");
+	while ((entry = readdir(dir))) {
+		// Look for common USB serial device patterns
+		if (strncmp(entry->d_name, "ttyUSB", 6) == 0 ||
+		    strncmp(entry->d_name, "ttyACM", 6) == 0 ||
+		    strncmp(entry->d_name, "ttyS", 4) == 0) {
+			
+			snprintf(name, sizeof(name), "/dev/%s", entry->d_name);
+			DEBUG_FMT("Found device %s", name);
+			
+			// Check if device exists and is accessible
+			if (stat(name, &statbuf) == -1)
+				continue;
+			if (!S_ISCHR(statbuf.st_mode))
+				continue;
+			
+			// Try to open the device to verify it's accessible
+			int fd = open(name, O_RDWR | O_NONBLOCK | O_NOCTTY | O_CLOEXEC);
+			if (fd < 0) {
+				DEBUG("Open failed, skipping");
+				continue;
+			}
+			close(fd);
+			
+			DEBUG_FMT("Found accessible port %s", name);
+			*list = list_append(*list, name);
+			if (!*list) {
+				SET_ERROR(ret, SP_ERR_MEM, "List append failed");
+				break;
+			}
 		}
 	}
 	closedir(dir);

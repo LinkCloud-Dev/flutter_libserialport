@@ -1,3 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
   package="org.sigrok.flutter_libserialport">
+  
+  <!-- USB Host permissions -->
+  <uses-permission android:name="android.permission.USB_PERMISSION" />
+  <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+  
+  <!-- Serial device access permissions -->
+  <uses-permission android:name="android.permission.ACCESS_SUPERUSER" />
+  
+  <!-- System file access permissions -->
+  <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+  
 </manifest>
