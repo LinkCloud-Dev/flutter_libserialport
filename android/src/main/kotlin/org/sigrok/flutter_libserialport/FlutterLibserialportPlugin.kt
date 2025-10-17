@@ -70,7 +70,7 @@ class FlutterLibserialportPlugin: FlutterPlugin, MethodCallHandler, ActivityAwar
 
     // Find USB device by matching product name and manufacturer
     val device = usbManager?.deviceList?.values?.find { usbDevice ->
-      usbDevice.productName == "FT232R USB UART" && usbDevice.manufacturerName == "FTDI"
+      (usbDevice.productName == "FT232R USB UART" || usbDevice.productName == "USB Serial Device") && usbDevice.manufacturerName == "FTDI"
     }
     
     if (device == null) {
@@ -104,7 +104,7 @@ class FlutterLibserialportPlugin: FlutterPlugin, MethodCallHandler, ActivityAwar
 
     // Find USB device by matching product name and manufacturer
     val device = usbManager?.deviceList?.values?.find { usbDevice ->
-      usbDevice.productName == "FT232R USB UART" && usbDevice.manufacturerName == "FTDI"
+      (usbDevice.productName == "FT232R USB UART" || usbDevice.productName == "USB Serial Device") && usbDevice.manufacturerName == "FTDI"
     }
     
     if (device == null) {
