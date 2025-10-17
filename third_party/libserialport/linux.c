@@ -285,6 +285,15 @@ SP_PRIV enum sp_return list_ports_fallback(struct sp_port ***list)
 	}
 	closedir(dir);
 
-	DEBUG_FMT("Direct enumeration found %d ports", (*list) ? list_length(*list) : 0);
+	// Count the number of ports found
+	int port_count = 0;
+	if (*list) {
+		struct sp_port **current = *list;
+		while (*current) {
+			port_count++;
+			current++;
+		}
+	}
+	DEBUG_FMT("Direct enumeration found %d ports", port_count);
 	return ret;
 }
