@@ -23,7 +23,8 @@
 #include "libserialport_internal.h"
 
 /* Function declarations */
-SP_PRIV enum sp_return list_ports_fallback(struct sp_port ***list);
+static enum sp_return list_ports_fallback(struct sp_port ***list);
+
 
 /*
  * The 'e' modifier for O_CLOEXEC is glibc >= 2.7 only, hence not
@@ -296,7 +297,7 @@ SP_PRIV enum sp_return list_ports(struct sp_port ***list)
 }
 
 /* Fallback function when sysfs access is denied */
-SP_PRIV enum sp_return list_ports_fallback(struct sp_port ***list)
+static enum sp_return list_ports_fallback(struct sp_port ***list)
 {
 	DIR *dir;
 	struct dirent *entry;
