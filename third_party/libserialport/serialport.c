@@ -567,18 +567,24 @@ SP_API enum sp_return sp_open(struct sp_port *port, enum sp_mode flags)
 	 * descriptor is already locked by another process.
 	 */
 #ifdef HAVE_FLOCK
+#ifndef __ANDROID__
+	// Skip flock on Android to avoid SELinux lock errors on iMin devices
 	if (flock(port->fd, LOCK_EX | LOCK_NB) < 0)
 		RETURN_FAIL("flock() failed");
 #endif
+#endif
 
 #ifdef TIOCEXCL
+#ifndef __ANDROID__
 	/*
 	 * Before Linux 3.8 ioctl(*, TIOCEXCL) was not implemented and could
 	 * lead to EINVAL or ENOTTY.
 	 * These errors aren't fatal and can be ignored.
+	 * Skip on Android to avoid SELinux errors on iMin devices.
 	 */
 	if (ioctl(port->fd, TIOCEXCL) < 0 && errno != EINVAL && errno != ENOTTY)
 		RETURN_FAIL("ioctl() failed");
+#endif
 #endif
 
 #endif
