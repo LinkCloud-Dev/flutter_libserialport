@@ -224,8 +224,12 @@ SP_PRIV enum sp_return get_port_details(struct sp_port *port)
 
 SP_PRIV enum sp_return list_ports(struct sp_port ***list)
 {
-	// Add printf for debugging (will show in Android logcat)
+	// Add detailed printf for debugging (will show in Android logcat)
+	printf("========================================\n");
+	printf("FLUTTER_LIBSERIALPORT: list_ports() called\n");
 	printf("FLUTTER_LIBSERIALPORT: Starting /dev direct enumeration (SELinux-safe)\n");
+	printf("FLUTTER_LIBSERIALPORT: This avoids all sysfs access\n");
+	printf("========================================\n");
 	DEBUG("Enumerating tty devices using /dev direct enumeration");
 	
 	// For new devices with SELinux restrictions, use direct /dev enumeration
@@ -243,14 +247,23 @@ SP_PRIV enum sp_return list_ports_fallback(struct sp_port ***list)
 	struct stat statbuf;
 
 	printf("FLUTTER_LIBSERIALPORT: Scanning /dev for serial devices\n");
+	printf("FLUTTER_LIBSERIALPORT: Opening /dev directory...\n");
 	DEBUG("Direct enumeration: Scanning /dev for serial devices");
 	if (!(dir = opendir("/dev"))) {
-		printf("FLUTTER_LIBSERIALPORT: ERROR - Could not open /dev\n");
+		printf("FLUTTER_LIBSERIALPORT: ERROR - Could not open /dev directory!\n");
+		printf("FLUTTER_LIBSERIALPORT: Error code: %d\n", errno);
 		RETURN_FAIL("Could not open /dev");
 	}
+	printf("FLUTTER_LIBSERIALPORT: Successfully opened /dev directory\n");
 
+	printf("FLUTTER_LIBSERIALPORT: Starting to iterate over /dev entries...\n");
 	DEBUG("Iterating over /dev entries");
+	int total_entries = 0;
+	int matching_entries = 0;
+	
 	while ((entry = readdir(dir))) {
+		total_entries++;
+		
 		// Look for common serial device patterns
 		if (strncmp(entry->d_name, "ttyUSB", 6) == 0 ||    // USB serial devices
 		    strncmp(entry->d_name, "ttyACM", 6) == 0 ||    // USB CDC devices
@@ -259,37 +272,54 @@ SP_PRIV enum sp_return list_ports_fallback(struct sp_port ***list)
 		    strncmp(entry->d_name, "ttyXR", 5) == 0 ||     // XR serial ports
 		    strncmp(entry->d_name, "rfcomm", 6) == 0) {   // Bluetooth serial
 			
+			matching_entries++;
 			snprintf(name, sizeof(name), "/dev/%s", entry->d_name);
+			printf("FLUTTER_LIBSERIALPORT: Found potential device: %s\n", name);
 			DEBUG_FMT("Found potential device %s", name);
 			
 			// Check if device exists and is accessible
+			printf("FLUTTER_LIBSERIALPORT: Checking device: %s\n", name);
 			if (stat(name, &statbuf) == -1) {
+				printf("FLUTTER_LIBSERIALPORT: Stat failed for %s (errno: %d)\n", name, errno);
 				DEBUG_FMT("Stat failed for %s", name);
 				continue;
 			}
+			printf("FLUTTER_LIBSERIALPORT: Stat successful for %s\n", name);
+			
 			if (!S_ISCHR(statbuf.st_mode)) {
+				printf("FLUTTER_LIBSERIALPORT: Not a character device: %s\n", name);
 				DEBUG_FMT("Not a character device: %s", name);
 				continue;
 			}
+			printf("FLUTTER_LIBSERIALPORT: Is a character device: %s\n", name);
 			
 			// Try to open the device to verify it's accessible
+			printf("FLUTTER_LIBSERIALPORT: Attempting to open: %s\n", name);
 			int fd = open(name, O_RDWR | O_NONBLOCK | O_NOCTTY | O_CLOEXEC);
 			if (fd < 0) {
+				printf("FLUTTER_LIBSERIALPORT: Open failed for %s: %s (errno: %d)\n", name, strerror(errno), errno);
 				DEBUG_FMT("Open failed for %s: %s", name, strerror(errno));
 				continue;
 			}
 			close(fd);
+			printf("FLUTTER_LIBSERIALPORT: Successfully opened and closed: %s\n", name);
 			
-			printf("FLUTTER_LIBSERIALPORT: Found accessible port %s\n", name);
+			printf("FLUTTER_LIBSERIALPORT: Adding to port list: %s\n", name);
 			DEBUG_FMT("Found accessible port %s", name);
 			*list = list_append(*list, name);
 			if (!*list) {
+				printf("FLUTTER_LIBSERIALPORT: ERROR - List append failed!\n");
 				SET_ERROR(ret, SP_ERR_MEM, "List append failed");
 				break;
 			}
+			printf("FLUTTER_LIBSERIALPORT: Successfully added to list: %s\n", name);
 		}
 	}
 	closedir(dir);
+
+	printf("FLUTTER_LIBSERIALPORT: Finished iterating /dev directory\n");
+	printf("FLUTTER_LIBSERIALPORT: Total entries scanned: %d\n", total_entries);
+	printf("FLUTTER_LIBSERIALPORT: Matching entries found: %d\n", matching_entries);
 
 	// Count the number of ports found
 	int port_count = 0;
@@ -300,7 +330,12 @@ SP_PRIV enum sp_return list_ports_fallback(struct sp_port ***list)
 			current++;
 		}
 	}
-	printf("FLUTTER_LIBSERIALPORT: Direct enumeration found %d ports\n", port_count);
+	
+	printf("========================================\n");
+	printf("FLUTTER_LIBSERIALPORT: FINAL RESULT\n");
+	printf("FLUTTER_LIBSERIALPORT: Direct enumeration found %d accessible ports\n", port_count);
+	printf("FLUTTER_LIBSERIALPORT: Return code: %d\n", ret);
+	printf("========================================\n");
 	DEBUG_FMT("Direct enumeration found %d ports", port_count);
 	return ret;
 }
