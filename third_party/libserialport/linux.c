@@ -237,17 +237,44 @@ SP_PRIV enum sp_return list_ports(struct sp_port ***list)
 	struct stat statbuf;
 
 	DEBUG("Enumerating tty devices");
+	
+	// First, try to detect if we have permission issues by testing a simple sysfs access
+	struct stat test_stat;
+	if (stat("/sys/class/tty", &test_stat) == -1) {
+		if (errno == EACCES || errno == EPERM) {
+			DEBUG("Permission denied accessing /sys/class/tty, using fallback");
+			return list_ports_fallback(list);
+		}
+	}
+	
 	if (!(dir = opendir("/sys/class/tty"))) {
 		DEBUG("Could not open /sys/class/tty, trying /dev directly");
 		// Fallback: try to enumerate /dev directly for USB devices
 		return list_ports_fallback(list);
 	}
+	
+	// Test if we can actually read from the directory (SELinux might allow opendir but not readdir)
+	struct dirent *test_entry = readdir(dir);
+	if (!test_entry) {
+		DEBUG("Cannot read from /sys/class/tty, trying /dev directly");
+		closedir(dir);
+		return list_ports_fallback(list);
+	}
+	// Reset directory position
+	rewinddir(dir);
 
 	DEBUG("Iterating over results");
 	while ((entry = readdir(dir))) {
 		snprintf(buf, sizeof(buf), "/sys/class/tty/%s", entry->d_name);
-		if (lstat(buf, &statbuf) == -1)
+		if (lstat(buf, &statbuf) == -1) {
+			// Check if this is a permission error (SELinux)
+			if (errno == EACCES || errno == EPERM) {
+				DEBUG("Permission denied accessing sysfs, switching to fallback");
+				closedir(dir);
+				return list_ports_fallback(list);
+			}
 			continue;
+		}
 		if (!S_ISLNK(statbuf.st_mode))
 			snprintf(buf, sizeof(buf), "/sys/class/tty/%s/device", entry->d_name);
 		len = readlink(buf, target, sizeof(target));
