@@ -11,4 +11,12 @@
   <!-- System file access permissions -->
   <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
   
+  <!-- iMin device specific permissions -->
+  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+  <uses-permission android:name="android.permission.MOUNT_UNMOUNT_FILESYSTEMS" />
+  
+  <!-- Device access permissions -->
+  <uses-permission android:name="android.permission.ACCESS_DEVICE_STORAGE" />
+  <uses-permission android:name="android.permission.WRITE_DEVICE_STORAGE" />
+  
 </manifest>
