@@ -224,106 +224,14 @@ SP_PRIV enum sp_return get_port_details(struct sp_port *port)
 
 SP_PRIV enum sp_return list_ports(struct sp_port ***list)
 {
-	char name[PATH_MAX], target[PATH_MAX];
-	struct dirent *entry;
-#ifdef HAVE_STRUCT_SERIAL_STRUCT
-	struct serial_struct serial_info;
-	int ioctl_result;
-#endif
-	char buf[sizeof(entry->d_name) + 23];
-	int len, fd;
-	DIR *dir;
-	int ret = SP_OK;
-	struct stat statbuf;
-
-	DEBUG("Enumerating tty devices");
+	DEBUG("Enumerating tty devices using /dev direct enumeration");
 	
-	// First, try to detect if we have permission issues by testing a simple sysfs access
-	struct stat test_stat;
-	if (stat("/sys/class/tty", &test_stat) == -1) {
-		if (errno == EACCES || errno == EPERM) {
-			DEBUG("Permission denied accessing /sys/class/tty, using fallback");
-			return list_ports_fallback(list);
-		}
-	}
-	
-	if (!(dir = opendir("/sys/class/tty"))) {
-		DEBUG("Could not open /sys/class/tty, trying /dev directly");
-		// Fallback: try to enumerate /dev directly for USB devices
-		return list_ports_fallback(list);
-	}
-	
-	// Test if we can actually read from the directory (SELinux might allow opendir but not readdir)
-	struct dirent *test_entry = readdir(dir);
-	if (!test_entry) {
-		DEBUG("Cannot read from /sys/class/tty, trying /dev directly");
-		closedir(dir);
-		return list_ports_fallback(list);
-	}
-	// Reset directory position
-	rewinddir(dir);
-
-	DEBUG("Iterating over results");
-	while ((entry = readdir(dir))) {
-		snprintf(buf, sizeof(buf), "/sys/class/tty/%s", entry->d_name);
-		if (lstat(buf, &statbuf) == -1) {
-			// Check if this is a permission error (SELinux)
-			if (errno == EACCES || errno == EPERM) {
-				DEBUG("Permission denied accessing sysfs, switching to fallback");
-				closedir(dir);
-				return list_ports_fallback(list);
-			}
-			continue;
-		}
-		if (!S_ISLNK(statbuf.st_mode))
-			snprintf(buf, sizeof(buf), "/sys/class/tty/%s/device", entry->d_name);
-		len = readlink(buf, target, sizeof(target));
-		if (len <= 0 || len >= (int)(sizeof(target) - 1))
-			continue;
-		target[len] = 0;
-		if (strstr(target, "virtual"))
-			continue;
-		snprintf(name, sizeof(name), "/dev/%s", entry->d_name);
-		DEBUG_FMT("Found device %s", name);
-		if (strstr(target, "serial8250")) {
-			/*
-			 * The serial8250 driver has a hardcoded number of ports.
-			 * The only way to tell which actually exist on a given system
-			 * is to try to open them and make an ioctl call.
-			 */
-			DEBUG("serial8250 device, attempting to open");
-			if ((fd = open(name, O_RDWR | O_NONBLOCK | O_NOCTTY | O_CLOEXEC)) < 0) {
-				DEBUG("Open failed, skipping");
-				continue;
-			}
-#ifdef HAVE_STRUCT_SERIAL_STRUCT
-			ioctl_result = ioctl(fd, TIOCGSERIAL, &serial_info);
-#endif
-			close(fd);
-#ifdef HAVE_STRUCT_SERIAL_STRUCT
-			if (ioctl_result != 0) {
-				DEBUG("ioctl failed, skipping");
-				continue;
-			}
-			if (serial_info.type == PORT_UNKNOWN) {
-				DEBUG("Port type is unknown, skipping");
-				continue;
-			}
-#endif
-		}
-		DEBUG_FMT("Found port %s", name);
-		*list = list_append(*list, name);
-		if (!*list) {
-			SET_ERROR(ret, SP_ERR_MEM, "List append failed");
-			break;
-		}
-	}
-	closedir(dir);
-
-	return ret;
+	// For new devices with SELinux restrictions, use direct /dev enumeration
+	// This avoids all sysfs access that triggers SELinux errors
+	return list_ports_fallback(list);
 }
 
-/* Fallback function when sysfs access is denied */
+/* Direct /dev enumeration for devices with SELinux restrictions */
 SP_PRIV enum sp_return list_ports_fallback(struct sp_port ***list)
 {
 	DIR *dir;
@@ -332,30 +240,37 @@ SP_PRIV enum sp_return list_ports_fallback(struct sp_port ***list)
 	int ret = SP_OK;
 	struct stat statbuf;
 
-	DEBUG("Fallback: Enumerating /dev directly");
+	DEBUG("Direct enumeration: Scanning /dev for serial devices");
 	if (!(dir = opendir("/dev")))
 		RETURN_FAIL("Could not open /dev");
 
 	DEBUG("Iterating over /dev entries");
 	while ((entry = readdir(dir))) {
-		// Look for common USB serial device patterns
-		if (strncmp(entry->d_name, "ttyUSB", 6) == 0 ||
-		    strncmp(entry->d_name, "ttyACM", 6) == 0 ||
-		    strncmp(entry->d_name, "ttyS", 4) == 0) {
+		// Look for common serial device patterns
+		if (strncmp(entry->d_name, "ttyUSB", 6) == 0 ||    // USB serial devices
+		    strncmp(entry->d_name, "ttyACM", 6) == 0 ||    // USB CDC devices
+		    strncmp(entry->d_name, "ttyS", 4) == 0 ||      // Serial ports
+		    strncmp(entry->d_name, "ttyAMA", 6) == 0 ||    // ARM serial ports
+		    strncmp(entry->d_name, "ttyXR", 5) == 0 ||     // XR serial ports
+		    strncmp(entry->d_name, "rfcomm", 6) == 0) {   // Bluetooth serial
 			
 			snprintf(name, sizeof(name), "/dev/%s", entry->d_name);
-			DEBUG_FMT("Found device %s", name);
+			DEBUG_FMT("Found potential device %s", name);
 			
 			// Check if device exists and is accessible
-			if (stat(name, &statbuf) == -1)
+			if (stat(name, &statbuf) == -1) {
+				DEBUG_FMT("Stat failed for %s", name);
 				continue;
-			if (!S_ISCHR(statbuf.st_mode))
+			}
+			if (!S_ISCHR(statbuf.st_mode)) {
+				DEBUG_FMT("Not a character device: %s", name);
 				continue;
+			}
 			
 			// Try to open the device to verify it's accessible
 			int fd = open(name, O_RDWR | O_NONBLOCK | O_NOCTTY | O_CLOEXEC);
 			if (fd < 0) {
-				DEBUG("Open failed, skipping");
+				DEBUG_FMT("Open failed for %s: %s", name, strerror(errno));
 				continue;
 			}
 			close(fd);
@@ -370,5 +285,6 @@ SP_PRIV enum sp_return list_ports_fallback(struct sp_port ***list)
 	}
 	closedir(dir);
 
+	DEBUG_FMT("Direct enumeration found %d ports", (*list) ? list_length(*list) : 0);
 	return ret;
 }
