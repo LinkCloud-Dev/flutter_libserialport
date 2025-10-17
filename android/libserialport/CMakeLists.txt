@@ -17,3 +17,6 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE LIBSERIALPORT_ATBUILD)
 target_include_directories(${PROJECT_NAME} PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}"
   "${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE_PATH}")
+
+# Link Android log library for __android_log_print
+target_link_libraries(${PROJECT_NAME} log)
