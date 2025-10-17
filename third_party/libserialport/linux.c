@@ -224,6 +224,8 @@ SP_PRIV enum sp_return get_port_details(struct sp_port *port)
 
 SP_PRIV enum sp_return list_ports(struct sp_port ***list)
 {
+	// Add printf for debugging (will show in Android logcat)
+	printf("FLUTTER_LIBSERIALPORT: Starting /dev direct enumeration (SELinux-safe)\n");
 	DEBUG("Enumerating tty devices using /dev direct enumeration");
 	
 	// For new devices with SELinux restrictions, use direct /dev enumeration
@@ -240,9 +242,12 @@ SP_PRIV enum sp_return list_ports_fallback(struct sp_port ***list)
 	int ret = SP_OK;
 	struct stat statbuf;
 
+	printf("FLUTTER_LIBSERIALPORT: Scanning /dev for serial devices\n");
 	DEBUG("Direct enumeration: Scanning /dev for serial devices");
-	if (!(dir = opendir("/dev")))
+	if (!(dir = opendir("/dev"))) {
+		printf("FLUTTER_LIBSERIALPORT: ERROR - Could not open /dev\n");
 		RETURN_FAIL("Could not open /dev");
+	}
 
 	DEBUG("Iterating over /dev entries");
 	while ((entry = readdir(dir))) {
@@ -275,6 +280,7 @@ SP_PRIV enum sp_return list_ports_fallback(struct sp_port ***list)
 			}
 			close(fd);
 			
+			printf("FLUTTER_LIBSERIALPORT: Found accessible port %s\n", name);
 			DEBUG_FMT("Found accessible port %s", name);
 			*list = list_append(*list, name);
 			if (!*list) {
@@ -294,6 +300,7 @@ SP_PRIV enum sp_return list_ports_fallback(struct sp_port ***list)
 			current++;
 		}
 	}
+	printf("FLUTTER_LIBSERIALPORT: Direct enumeration found %d ports\n", port_count);
 	DEBUG_FMT("Direct enumeration found %d ports", port_count);
 	return ret;
 }
