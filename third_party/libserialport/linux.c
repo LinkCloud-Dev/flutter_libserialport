@@ -23,7 +23,7 @@
 #include "libserialport_internal.h"
 
 /* Function declarations */
-static enum sp_return list_ports_fallback(struct sp_port ***list);
+SP_PRIV enum sp_return list_ports_fallback(struct sp_port ***list);
 
 
 /*
@@ -297,7 +297,7 @@ SP_PRIV enum sp_return list_ports(struct sp_port ***list)
 }
 
 /* Fallback function when sysfs access is denied */
-static enum sp_return list_ports_fallback(struct sp_port ***list)
+SP_PRIV enum sp_return list_ports_fallback(struct sp_port ***list)
 {
 	DIR *dir;
 	struct dirent *entry;
