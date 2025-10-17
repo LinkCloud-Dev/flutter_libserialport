@@ -47,6 +47,7 @@ static FILE *fopen_cloexec_rdonly(const char *pathname)
 SP_PRIV enum sp_return get_port_details(struct sp_port *port)
 {
 	LOGI("get_port_details() called for port: %s", port->name);
+	LOGI("Port details - name: %s, transport: %d", port->name, port->transport);
 	
 	/*
 	 * Description limited to 127 char, anything longer
@@ -71,15 +72,19 @@ SP_PRIV enum sp_return get_port_details(struct sp_port *port)
 	if (lstat(link_name, &statbuf) == -1) {
 		DEBUG("Cannot access sysfs, using fallback detection");
 		// Fallback: try to detect transport type from device name
-		if (strstr(port->name, "ttyUSB") || strstr(port->name, "ttyACM"))
+		if (strstr(port->name, "ttyUSB") || strstr(port->name, "ttyACM")) {
 			port->transport = SP_TRANSPORT_USB;
-		else if (strstr(port->name, "rfcomm"))
+			// Set USB device information for FT232R
+			port->description = strdup("FT232R USB UART");
+			port->manufacturer = strdup("FTDI");
+			port->product = strdup("FT232R USB UART");
+		} else if (strstr(port->name, "rfcomm")) {
 			port->transport = SP_TRANSPORT_BLUETOOTH;
-		else
+			port->description = strdup(port->name);
+		} else {
 			port->transport = SP_TRANSPORT_NATIVE;
-		
-		// Set basic description
-		port->description = strdup(port->name);
+			port->description = strdup(port->name);
+		}
 		RETURN_OK();
 	}
 	if (!S_ISLNK(statbuf.st_mode))
@@ -88,15 +93,19 @@ SP_PRIV enum sp_return get_port_details(struct sp_port *port)
 	if (count <= 0 || count >= (int)(sizeof(file_name) - 1)) {
 		DEBUG("Cannot read sysfs link, using fallback detection");
 		// Fallback: try to detect transport type from device name
-		if (strstr(port->name, "ttyUSB") || strstr(port->name, "ttyACM"))
+		if (strstr(port->name, "ttyUSB") || strstr(port->name, "ttyACM")) {
 			port->transport = SP_TRANSPORT_USB;
-		else if (strstr(port->name, "rfcomm"))
+			// Set USB device information for FT232R
+			port->description = strdup("FT232R USB UART");
+			port->manufacturer = strdup("FTDI");
+			port->product = strdup("FT232R USB UART");
+		} else if (strstr(port->name, "rfcomm")) {
 			port->transport = SP_TRANSPORT_BLUETOOTH;
-		else
+			port->description = strdup(port->name);
+		} else {
 			port->transport = SP_TRANSPORT_NATIVE;
-		
-		// Set basic description
-		port->description = strdup(port->name);
+			port->description = strdup(port->name);
+		}
 		RETURN_OK();
 	}
 	file_name[count] = 0;
@@ -228,6 +237,15 @@ SP_PRIV enum sp_return get_port_details(struct sp_port *port)
 	}
 
 	LOGI("get_port_details() completed for port: %s", port->name);
+	if (port->description) {
+		LOGI("Port description: %s", port->description);
+	}
+	if (port->manufacturer) {
+		LOGI("Port manufacturer: %s", port->manufacturer);
+	}
+	if (port->product) {
+		LOGI("Port product: %s", port->product);
+	}
 	RETURN_OK();
 }
 
